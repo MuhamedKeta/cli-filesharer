@@ -12,8 +12,15 @@ import (
 	"github.com/julienschmidt/httprouter"
 )
 
-func fileHandler(file *os.File) httprouter.Handle {
+func fileHandler(filePath string) httprouter.Handle {
+
 	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+
+		file, err := os.Open(filePath)
+		if err != nil {
+
+		}
+		defer file.Close()
 
 		w.Header().Set("Content-Type", "application/octet-stream")
 		w.Header().Set("Content-Disposition", "attachment")
@@ -23,52 +30,44 @@ func fileHandler(file *os.File) httprouter.Handle {
 }
 
 func (s Server) routesHandler() httprouter.Handle {
+
 	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 
+		fmt.Fprintf(w, "<h1>Hosted Files</h1>")
 		for _, f := range s.Files {
-			fmt.Fprintf(w, "<p><a href=\"http://%s%s/%s\"> http://%s%s/%s </a></p>", s.LocalIP, s.Port, f.Name(), s.LocalIP, s.Port, f.Name())
+			fmt.Fprintf(w, "<p><a href=\"http://%s%s/%s\"> http://%s%s/%s </a></p>", s.LocalIP, s.Port, f, s.LocalIP, s.Port, f)
 		}
+
+		fmt.Fprintf(w, `<br/><h1>Upload File</h1><br/>
+		<form
+			enctype="multipart/form-data"
+			action="upload"
+			method="post">
+			<input type="file" name="myFile" />
+			<input type="submit" value="upload" />
+		  </form>
+		</body>
+	  </html>`)
 
 	}
 }
 
 type Server struct {
 	Port    string
-	Files   []*os.File
+	Files   []string
 	LocalIP string
 	Router  *httprouter.Router
 }
 
-func (s Server) Close() error {
-
-	var retErr error
-	for _, f := range s.Files {
-		err := f.Close()
-		if err != nil {
-			retErr = err
-		}
-	}
-
-	return retErr
-}
-
 func (s *Server) routes() {
+
 	for _, f := range s.Files {
-		s.Router.GET("/"+f.Name(), fileHandler(f))
+		s.Router.GET("/"+f, fileHandler(f))
 	}
 
 	s.Router.GET("/", s.routesHandler())
-}
-func (s *Server) AddFile(filePath string) error {
 
-	f, err := os.Open(filePath)
-	if err != nil {
-		return err
-	}
-
-	s.Files = append(s.Files, f)
-
-	return nil
+	s.Router.POST("/upload", uploadFile)
 
 }
 
@@ -78,10 +77,7 @@ func NewServer(port string, localIP string, filePaths []string) Server {
 		Port:    port,
 		LocalIP: localIP,
 		Router:  httprouter.New(),
-	}
-
-	for _, f := range filePaths {
-		srv.AddFile(f)
+		Files:   filePaths,
 	}
 
 	srv.routes()
@@ -130,7 +126,6 @@ func main() {
 	}
 
 	srv := NewServer(port, localIP, files)
-	defer srv.Close()
 
 	fmt.Println("server started on: http://" + localIP + port)
 
